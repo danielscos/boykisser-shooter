@@ -1,16 +1,25 @@
 {
   "name": "boykisser_shooter",
   "version": "1.0.0",
-  "description": "",
+  "description": "a galaxy shooter game but its a boykisser",
   "main": "game.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
-  "keywords": [],
+  "keywords": [
+    "game",
+    "kaboom",
+    "boykisser"
+  ],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "kaboom": "^3000.1.17"
+  },
+  "devDependencies": {
+    "vite": "^7.3.0"
   }
 }
