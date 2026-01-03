@@ -18,13 +18,12 @@ loadSprite(
   "enemy",
   "data:image/svg+xml;base64," +
     btoa(`
-    <svg width="24" height="24" xmlns="https://www.w3.org/2000/svg">
+    <svg width="24" height="24" xmlns="http://www.w3.org/2000/svg">
       <polygon points="12,20 4,4 12,8 20,4" fill="#ff0000"/>
     </svg>
   `),
 );
 
-// bullet - we'll create bullets using rect() in the game scene
 loadSprite("bullet", bulletUrl);
 
 let score = 0;
@@ -70,6 +69,25 @@ scene("start", () => {
 scene("game", () => {
   score = 0;
   lives = 3;
+
+  for (let i = 0; i < 50; i++) {
+    add([
+      rect(2, 2),
+      pos(rand(0, width()), rand(0, height())),
+      color(255, 255, 255),
+      opacity(rand(0.3), 1),
+      move(DOWN, rand(20, 50)),
+      offscreen({ destroy: true, ditance: 10 }),
+      {
+        update() {
+          if (this.pos.y > height()) {
+            this.pos.y = 0;
+            this.pos.x = rand(0, width());
+          }
+        },
+      },
+    ]);
+  }
 
   // add player
   const player = add([
@@ -134,6 +152,99 @@ scene("game", () => {
     }
   });
 
+  // spawn enemies
+  const ENEMY_SPEED = 120;
+
+  let spawnInterval = 2;
+
+  loop(2, () => {
+    spawnInterval = Math.max(0.5, 2 - score / 100);
+
+    if (chance(1 / spawnInterval)) {
+      const randomX = rand(20, width() - 20);
+      add([
+        sprite("enemy"),
+        pos(randomX, 0),
+        anchor("center"),
+        area(),
+        move(DOWN, ENEMY_SPEED + score / 10),
+        offscreen({ destroy: true }),
+        "enemy",
+      ]);
+    }
+  });
+
+  let combo = 0;
+  let comboTimer = 0;
+
+  onCollideUpdate("bullet", "enemy", (bullet, enemy) => {
+    for (let i = 0; i < 8; i++) {
+      add([
+        rect(4, 4),
+        pos(enemy.pos),
+        color(255, rand(100, 200), 0),
+        move(rand(0, 360), rand(100, 200)),
+        lifespan(0.5),
+      ]);
+    }
+
+    bullet.destroy();
+    enemy.destroy();
+
+    combo += 1;
+    comboTimer = 2;
+    score += 10 * combo;
+
+    add([
+      text("x" + combo, { size: 32 }),
+      pos(enemy.pos),
+      color(255, 255, 0),
+      move(UP, 50),
+      lifespan(1),
+    ]);
+  });
+
+  onUpdate(() => {
+    if (comboTimer > 0) {
+      comboTimer -= dt();
+      if (comboTimer <= 0) combo = 0; // reset
+    }
+  });
+
+  onCollideUpdate("enemy", "player", (enemy, player) => {
+    shake(10);
+    enemy.destroy();
+
+    lives -= 1;
+
+    player.color = rgb(255, 100, 100);
+    wait(0.1, () => {
+      player.color = rgb(255, 255, 255);
+    });
+
+    if (lives <= 0) go("gameover");
+  });
+
+  loop(10, () => {
+    if (chance(0.3)) {
+      add([
+        rect(20, 20),
+        pos(rand(50, width() - 50), 0),
+        color(0, 255, 0),
+        anchor("center"),
+        area(),
+        move(DOWN, 100),
+        offscreen({ destroy: true }),
+        "powerup",
+      ]);
+    }
+  });
+
+  onCollideUpdate("player", "powerup", (player, powerup) => {
+    powerup.destroy();
+    lives += 1;
+  });
+
   // ui
   const scoreText = add([
     text("Score: " + score, { size: 24 }),
@@ -161,6 +272,31 @@ scene("game", () => {
     anchor("center"),
     color(150, 150, 150),
   ]);
+});
+
+scene("gameover", () => {
+  add([
+    text("GAME OVER", { size: 64 }),
+    pos(center()),
+    anchor("center"),
+    color(255, 100, 100),
+  ]);
+
+  add([
+    text("Final score: " + score, { size: 32 }),
+    pos(center().x, center().y + 80),
+    anchor("center"),
+    color(255, 255, 255),
+  ]);
+
+  add([
+    text("Press ENTER to restart", { size: 24 }),
+    pos(center().x, center().y + 140),
+    anchor("center"),
+    color(200, 200, 200),
+  ]);
+
+  onKeyPress("enter", () => go("start"));
 });
 
 go("start");
