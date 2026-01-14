@@ -1,28 +1,31 @@
 import kaboom from "kaboom";
-import playerUrl from "./player.png";
+import playerSheetUrl from "./playerSheet.png";
 import bulletUrl from "./bullet.png";
+import enemiesSheetUrl from "./enemiesSheet.png";
 
 // kaboom init
 kaboom({
-  width: 2000,
+  width: 1500,
   height: 1000,
   background: [10, 10, 40],
   scale: 1,
 });
 
 // player ship
-loadSprite("player", playerUrl);
+loadSprite("player", playerSheetUrl, {
+  sliceX: 4,
+  sliceY: 1,
+  anims: {
+    fly: { from: 0, to: 3, loop: true, speed: 10 },
+  },
+});
 
 // enemy ship
-loadSprite(
-  "enemy",
-  "data:image/svg+xml;base64," +
-    btoa(`
-    <svg width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="12,20 4,4 12,8 20,4" fill="#ff0000"/>
-    </svg>
-  `),
-);
+loadSprite("enemies", enemiesSheetUrl, {
+  sliceX: 10,
+  sliceY: 1,
+  scale: 2,
+});
 
 loadSprite("bullet", bulletUrl);
 
@@ -91,38 +94,44 @@ scene("game", () => {
 
   // add player
   const player = add([
-    sprite("player"),
+    sprite("player", { anim: "fly" }),
     pos(width() / 2, height() - 80),
     anchor("center"),
     area(),
-    scale(2),
+    scale(3),
     "player",
   ]);
 
-  const SPEED = 300;
+  const SPEED = 350;
 
   onKeyDown("left", () => {
-    if (player.pos.x > 16) {
-      player.move(-SPEED, 0);
-    }
+    player.move(-SPEED, 0);
   });
 
   onKeyDown("right", () => {
-    if (player.pos.x < width() - 16) {
-      player.move(SPEED, 0);
-    }
+    player.move(SPEED, 0);
   });
 
   onKeyDown("up", () => {
-    if (player.pos.y > 16) {
-      player.move(0, -SPEED);
-    }
+    player.move(0, -SPEED);
   });
 
   onKeyDown("down", () => {
-    if (player.pos.y < height() - 16) {
-      player.move(0, SPEED);
-    }
+    player.move(0, SPEED);
+  });
+
+  player.onUpdate(() => {
+    const halfWidth = (player.width * player.scale.x) / 2;
+    const halfHeight = (player.height * player.scale.y) / 2;
+
+    player.pos.x = Math.max(
+      halfWidth,
+      Math.min(player.pos.x, width() - halfWidth),
+    );
+    player.pos.y = Math.max(
+      halfHeight,
+      Math.min(player.pos.y, height() - halfHeight),
+    );
   });
 
   // shooting with rate limiting
@@ -151,7 +160,7 @@ scene("game", () => {
       });
     }
   });
-
+  2;
   // spawn enemies
   const ENEMY_SPEED = 120;
 
@@ -162,14 +171,32 @@ scene("game", () => {
 
     if (chance(1 / spawnInterval)) {
       const randomX = rand(20, width() - 20);
+      const enemyType = Math.floor(rand(0, 10));
+
+      // define different properties based on enemy type
+      let enemySpeed = ENEMY_SPEED;
+      let enemyPoints = 10;
+      let enemyScale = 1;
+
+      if (enemyType < 3) {
+        enemySpeed = ENEMY_SPEED * 1.5;
+        enemyPoints = 15;
+      } else if (enemyType >= 7) {
+        enemySpeed = ENEMY_SPEED * 0.7;
+        enemyScale = 1.5;
+        enemyPoints = 20;
+      }
+
       add([
-        sprite("enemy"),
+        sprite("enemies", { frame: enemyType }),
         pos(randomX, 0),
         anchor("center"),
         area(),
-        move(DOWN, ENEMY_SPEED + score / 10),
+        scale(3),
+        move(DOWN, enemySpeed + score / 10),
         offscreen({ destroy: true }),
         "enemy",
+        { points: enemyPoints }, // store points value
       ]);
     }
   });
@@ -193,7 +220,9 @@ scene("game", () => {
 
     combo += 1;
     comboTimer = 2;
-    score += 10 * combo;
+
+    const pointsEarned = (enemy.points || 10) * combo;
+    score += pointsEarned;
 
     add([
       text("x" + combo, { size: 32 }),
