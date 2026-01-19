@@ -72,6 +72,8 @@ scene("start", () => {
 scene("game", () => {
   score = 0;
   lives = 3;
+  let combo = 0;
+  let comboTimer = 0;
 
   for (let i = 0; i < 50; i++) {
     add([
@@ -140,9 +142,7 @@ scene("game", () => {
 
   // shooting
   onKeyDown("space", () => {
-    console.log("Space key pressed, canShoot:", canShoot);
     if (canShoot) {
-      console.log("Creating bullet at position:", player.pos.x, player.pos.y);
       const bullet = add([
         sprite("bullet"),
         pos(player.pos.x, player.pos.y - 40),
@@ -152,7 +152,6 @@ scene("game", () => {
         offscreen({ destroy: true }),
         "bullet",
       ]);
-      console.log("Bullet created:", bullet);
 
       canShoot = false;
       wait(shootCooldown, () => {
@@ -167,13 +166,10 @@ scene("game", () => {
   let spawnInterval = 2;
 
   loop(2, () => {
-    spawnInterval = Math.max(0.5, 2 - score / 100);
+    spawnInterval = Math.max(1.0, 2.5 - score / 100);
 
     if (chance(1 / spawnInterval)) {
-      const randomX = rand(20, width() - 20);
       const enemyType = Math.floor(rand(0, 10));
-
-      // define different properties based on enemy type
       let enemySpeed = ENEMY_SPEED;
       let enemyPoints = 10;
       let enemyScale = 1;
@@ -187,22 +183,75 @@ scene("game", () => {
         enemyPoints = 20;
       }
 
+      const enemyBaseWidth = 24;
+      const totalScale = 3 * enemyScale;
+      const enemyHalfWidth = (enemyBaseWidth * totalScale) / 2;
+      const margin = enemyHalfWidth + 100;
+      const randomX = rand(margin, width() - margin);
+
       add([
         sprite("enemies", { frame: enemyType }),
         pos(randomX, 0),
         anchor("center"),
         area(),
-        scale(3),
+        scale(3 * enemyScale),
         move(DOWN, enemySpeed + score / 10),
         offscreen({ destroy: true }),
         "enemy",
-        { points: enemyPoints }, // store points value
+        { points: enemyPoints, hp: 3 }, // store points value
       ]);
     }
   });
 
-  let combo = 0;
-  let comboTimer = 0;
+  const POPCORN_SPEED = 150;
+  const POPCORN_AMPLITUDE = 100;
+  const POPCORN_FREQUENCY = 3;
+
+  loop(3, () => {
+    const spawnFromLeft = chance(0.5);
+    const popcornHalfWidth = (24 * 2) / 2;
+    const safeMargin = popcornHalfWidth + POPCORN_AMPLITUDE + 20;
+    const startX = spawnFromLeft ? safeMargin : width() - safeMargin;
+    const direction = spawnFromLeft ? 1 : -1;
+    const waveSize = Math.floor(rand(3, 6));
+
+    for (let i = 0; i < waveSize; i++) {
+      wait(i * 0.3, () => {
+        const popcorn = add([
+          sprite("enemies", { frame: 3 }),
+          pos(startX, -20 - i * 40), // Spawn above offscreen
+          anchor("center"),
+          area(),
+          scale(2),
+          offscreen({ destroy: true }),
+          "enemy",
+          "popcorn",
+          {
+            hp: 1,
+            points: 5,
+            startX: startX,
+            direction: direction,
+            timeAlive: 0,
+          },
+        ]);
+
+        popcorn.onUpdate(() => {
+          popcorn.timeAlive += dt();
+          popcorn.pos.y += POPCORN_SPEED * dt();
+
+          // move in s curve (sine)
+          const sineOffset =
+            Math.sin(popcorn.timeAlive * POPCORN_FREQUENCY) * POPCORN_AMPLITUDE;
+          const newX = popcorn.startX + sineOffset * popcorn.direction;
+
+          popcorn.pos.x = Math.max(
+            popcornHalfWidth,
+            Math.min(newX, width() - popcornHalfWidth),
+          );
+        });
+      });
+    }
+  });
 
   onCollideUpdate("bullet", "enemy", (bullet, enemy) => {
     for (let i = 0; i < 8; i++) {
@@ -216,6 +265,18 @@ scene("game", () => {
     }
 
     bullet.destroy();
+
+    if (enemy.hp !== undefined) {
+      enemy.hp -= 1;
+      if (enemy.hp > 0) {
+        enemy.color = rgb(255, 100, 100);
+        wait(0.1, () => {
+          enemy.color = rgb(255, 255, 255);
+        });
+        return;
+      }
+    }
+
     enemy.destroy();
 
     combo += 1;
@@ -270,8 +331,24 @@ scene("game", () => {
   });
 
   onCollideUpdate("player", "powerup", (player, powerup) => {
+    for (let i = 0; i < 12; i++) {
+      add([
+        rect(6, 6),
+        pos(powerup.pos),
+        color(0, 255, rand(100, 200)),
+        move(rand(0, 360), rand(150, 250)),
+        lifespan(0.6),
+      ]);
+    }
+
     powerup.destroy();
     lives += 1;
+    shake(8);
+
+    player.color = rgb(100, 255, 100);
+    wait(0.15, () => {
+      player.color = rgb(255, 255, 255);
+    });
   });
 
   // ui
@@ -279,14 +356,14 @@ scene("game", () => {
     text("Score: " + score, { size: 24 }),
     pos(20, 20),
     color(255, 255, 255),
-    fixed(),
+    z(100),
   ]);
 
   const livesText = add([
     text("Lives: " + lives, { size: 24 }),
     pos(20, 50),
     color(255, 255, 255),
-    fixed(),
+    z(100),
   ]);
 
   onUpdate(() => {
