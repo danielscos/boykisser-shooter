@@ -1,10 +1,10 @@
-import kaboom from "kaboom";
+import kaplay from "kaplay";
 import playerSheetUrl from "./playerSheet.png";
 import bulletUrl from "./bullet.png";
 import enemiesSheetUrl from "./enemiesSheet.png";
 
-// kaboom init
-kaboom({
+// kaplay init
+kaplay({
   width: 1500,
   height: 1000,
   background: [10, 10, 40],
@@ -24,7 +24,6 @@ loadSprite("player", playerSheetUrl, {
 loadSprite("enemies", enemiesSheetUrl, {
   sliceX: 10,
   sliceY: 1,
-  scale: 2,
 });
 
 loadSprite("bullet", bulletUrl);
@@ -70,28 +69,56 @@ scene("start", () => {
 
 // game scene
 scene("game", () => {
+  // ---------------- constants ----------------
+
   score = 0;
   lives = 3;
   let combo = 0;
   let comboTimer = 0;
+  let currentWave = 0;
+  let waveActive = false;
+  let enemiesRemaining = 0;
+  let enemiesInWave = 0;
+
+  const ENEMY_SPEED = 120;
+  const POPCORN_SPEED = 150;
+  const POPCORN_AMPLITUDE = 100;
+  const POPCORN_FREQUENCY = 3;
+
+  // ------------ waves -------------
+
+  const waves = [
+    // wave 1: tutorial wave, display game mechanics and popcorn enemies
+    { regular: 0, fast: 0, heavy: 0, popcornWaves: 2, spawnDelay: 1.5 },
+
+    // wave 2: introduce regular enemies
+    { regular: 5, fast: 0, heavy: 0, popcornWaves: 1, spawnDelay: 1.5 },
+
+    // wave 3; mix it up
+    { regular: 8, fast: 2, heavy: 0, popcornWaves: 2, spawnDelay: 1.2 },
+
+    // rest
+    { regular: 10, fast: 3, heavy: 1, popcornWaves: 2, spawnDelay: 1.0 },
+    { regular: 12, fast: 5, heavy: 2, popcornWaves: 3, spawnDelay: 0.8 },
+    { regular: 15, fast: 8, heavy: 3, popcornWaves: 4, spawnDelay: 0.6 },
+  ];
 
   for (let i = 0; i < 50; i++) {
-    add([
+    const star = add([
       rect(2, 2),
       pos(rand(0, width()), rand(0, height())),
       color(255, 255, 255),
-      opacity(rand(0.3), 1),
+      opacity(rand(0.3, 1)),
       move(DOWN, rand(20, 50)),
-      offscreen({ destroy: true, ditance: 10 }),
-      {
-        update() {
-          if (this.pos.y > height()) {
-            this.pos.y = 0;
-            this.pos.x = rand(0, width());
-          }
-        },
-      },
+      offscreen({ destroy: true, distance: 10 }),
     ]);
+
+    star.onUpdate(() => {
+      if (star.pos.y > height()) {
+        star.pos.y = 0;
+        star.pos.x = rand(0, width());
+      }
+    });
   }
 
   // add player
@@ -159,71 +186,60 @@ scene("game", () => {
       });
     }
   });
-  2;
-  // spawn enemies
-  const ENEMY_SPEED = 120;
 
-  let spawnInterval = 2;
+  // --------------------- spawn functions ---------------------------
 
-  loop(2, () => {
-    spawnInterval = Math.max(1.0, 2.5 - score / 100);
+  function spawnEnemy(
+    frame: number,
+    points: number,
+    scaleMultiplier: number,
+    speed: number,
+  ): void {
+    const enemyBaseWidth = 24;
+    const totalScale = 3 * scaleMultiplier;
+    const enemyHalfWidth = (enemyBaseWidth * totalScale) / 2;
+    const margin = enemyHalfWidth + 100;
+    const randomX = rand(margin, width() - margin);
 
-    if (chance(1 / spawnInterval)) {
-      const enemyType = Math.floor(rand(0, 10));
-      let enemySpeed = ENEMY_SPEED;
-      let enemyPoints = 10;
-      let enemyScale = 1;
+    const enemy = add([
+      sprite("enemies", { frame: frame }),
+      pos(randomX, 0),
+      anchor("center"),
+      area(),
+      scale(3 * scaleMultiplier),
+      move(DOWN, speed),
+      offscreen({ destroy: true }),
+      opacity(1),
+      "enemy",
+      { points: points, hp: 3 },
+    ]);
 
-      if (enemyType < 3) {
-        enemySpeed = ENEMY_SPEED * 1.5;
-        enemyPoints = 15;
-      } else if (enemyType >= 7) {
-        enemySpeed = ENEMY_SPEED * 0.7;
-        enemyScale = 1.5;
-        enemyPoints = 20;
-      }
+    enemy.onDestroy(() => {
+      enemiesRemaining--;
+      debug.log(`Enemy destroyed. Remaining: ${enemiesRemaining}`);
+      checkWaveComplete();
+    });
+  }
 
-      const enemyBaseWidth = 24;
-      const totalScale = 3 * enemyScale;
-      const enemyHalfWidth = (enemyBaseWidth * totalScale) / 2;
-      const margin = enemyHalfWidth + 100;
-      const randomX = rand(margin, width() - margin);
-
-      add([
-        sprite("enemies", { frame: enemyType }),
-        pos(randomX, 0),
-        anchor("center"),
-        area(),
-        scale(3 * enemyScale),
-        move(DOWN, enemySpeed + score / 10),
-        offscreen({ destroy: true }),
-        "enemy",
-        { points: enemyPoints, hp: 3 }, // store points value
-      ]);
-    }
-  });
-
-  const POPCORN_SPEED = 150;
-  const POPCORN_AMPLITUDE = 100;
-  const POPCORN_FREQUENCY = 3;
-
-  loop(3, () => {
+  function spawnPopcornWave(waveSize: number) {
     const spawnFromLeft = chance(0.5);
     const popcornHalfWidth = (24 * 2) / 2;
     const safeMargin = popcornHalfWidth + POPCORN_AMPLITUDE + 20;
     const startX = spawnFromLeft ? safeMargin : width() - safeMargin;
     const direction = spawnFromLeft ? 1 : -1;
-    const waveSize = Math.floor(rand(3, 6));
+
+    const moveSpeed = currentWave === 0 ? POPCORN_SPEED * 0.7 : POPCORN_SPEED;
 
     for (let i = 0; i < waveSize; i++) {
       wait(i * 0.3, () => {
         const popcorn = add([
           sprite("enemies", { frame: 3 }),
-          pos(startX, -20 - i * 40), // Spawn above offscreen
+          pos(startX, -20 - i * 40),
           anchor("center"),
           area(),
           scale(2),
           offscreen({ destroy: true }),
+          opacity(1),
           "enemy",
           "popcorn",
           {
@@ -235,15 +251,15 @@ scene("game", () => {
           },
         ]);
 
+        // ----------- popcorn creation -----------
+
         popcorn.onUpdate(() => {
           popcorn.timeAlive += dt();
-          popcorn.pos.y += POPCORN_SPEED * dt();
+          popcorn.pos.y += moveSpeed * dt();
 
-          // move in s curve (sine)
           const sineOffset =
             Math.sin(popcorn.timeAlive * POPCORN_FREQUENCY) * POPCORN_AMPLITUDE;
           const newX = popcorn.startX + sineOffset * popcorn.direction;
-
           popcorn.pos.x = Math.max(
             popcornHalfWidth,
             Math.min(newX, width() - popcornHalfWidth),
@@ -251,7 +267,82 @@ scene("game", () => {
         });
       });
     }
-  });
+  }
+
+  function startWave(waveNumber: number): void {
+    if (waveNumber >= waves.length) {
+      currentWave = 0;
+      waveNumber = 0;
+    }
+
+    const wave = waves[waveNumber];
+    waveActive = true;
+
+    enemiesInWave = wave.regular + wave.fast + wave.heavy;
+    enemiesRemaining = enemiesInWave;
+
+    debug.log(
+      `Starting wave ${waveNumber + 1}: Initial count = ${enemiesInWave}`,
+    );
+
+    for (let i = 0; i < wave.regular; i++) {
+      wait(i * wave.spawnDelay, () => {
+        const randomFrame = Math.floor(rand(4, 7));
+        spawnEnemy(randomFrame, 10, 1, ENEMY_SPEED);
+      });
+    }
+
+    for (let i = 0; i < wave.fast; i++) {
+      wait((wave.regular + i) * wave.spawnDelay, () => {
+        const fastFrame = Math.floor(rand(0, 3));
+        spawnEnemy(fastFrame, 15, 1, ENEMY_SPEED * 1.5);
+      });
+    }
+
+    for (let i = 0; i < wave.heavy; i++) {
+      wait((wave.regular + wave.fast + i) * wave.spawnDelay, () => {
+        const heavyFrame = Math.floor(rand(7, 10));
+        spawnEnemy(heavyFrame, 20, 1.5, ENEMY_SPEED * 0.7);
+      });
+    }
+
+    for (let i = 0; i < wave.popcornWaves; i++) {
+      const waveSize = currentWave === 0 ? 6 : 4;
+      enemiesInWave += waveSize;
+      enemiesRemaining += waveSize;
+
+      debug.log(
+        `Adding popcorn wave ${i + 1}: size=${waveSize}, total now=${enemiesInWave}`,
+      );
+
+      const popcornDelay = currentWave === 0 ? i * 5 : i * 4;
+      wait(popcornDelay, () => {
+        spawnPopcornWave(waveSize);
+      });
+    }
+
+    debug.log(
+      `Wave ${waveNumber + 1} setup complete: Total enemies = ${enemiesInWave}`,
+    );
+  }
+
+  function checkWaveComplete() {
+    debug.log(
+      `checkWaveComplete: waveActive=${waveActive}, enemiesRemaining=${enemiesRemaining}, enemiesInWave=${enemiesInWave}`,
+    );
+
+    if (waveActive && enemiesRemaining <= 0) {
+      waveActive = false;
+      debug.log("Wave complete! Starting next wave in 3 seconds...");
+
+      wait(3, () => {
+        currentWave++;
+        startWave(currentWave);
+      });
+    }
+  }
+
+  // --------------------- collision handlers ------------------------
 
   onCollideUpdate("bullet", "enemy", (bullet, enemy) => {
     for (let i = 0; i < 8; i++) {
@@ -260,11 +351,14 @@ scene("game", () => {
         pos(enemy.pos),
         color(255, rand(100, 200), 0),
         move(rand(0, 360), rand(100, 200)),
-        lifespan(0.5),
+        opacity(1),
+        lifespan(0.5, { fade: 0.3 }),
       ]);
     }
 
     bullet.destroy();
+
+    // ----------------- enemy collision handler --------------
 
     if (enemy.hp !== undefined) {
       enemy.hp -= 1;
@@ -277,7 +371,21 @@ scene("game", () => {
       }
     }
 
-    enemy.destroy();
+    enemy.color = rgb(255, 100, 100);
+
+    wait(0.1, () => {
+      add([
+        sprite("enemies", { frame: enemy.frame }),
+        pos(enemy.pos),
+        anchor("center"),
+        scale(enemy.scale),
+        opacity(0.85),
+        lifespan(0.2, { fade: 0.1 }),
+        z(enemy.z || 0),
+      ]);
+
+      enemy.destroy();
+    });
 
     combo += 1;
     comboTimer = 2;
@@ -290,7 +398,8 @@ scene("game", () => {
       pos(enemy.pos),
       color(255, 255, 0),
       move(UP, 50),
-      lifespan(1),
+      opacity(1),
+      lifespan(1, { fade: 0.3 }),
     ]);
   });
 
@@ -337,7 +446,8 @@ scene("game", () => {
         pos(powerup.pos),
         color(0, 255, rand(100, 200)),
         move(rand(0, 360), rand(150, 250)),
-        lifespan(0.6),
+        opacity(1),
+        lifespan(0.6, { fade: 0.3 }),
       ]);
     }
 
@@ -351,7 +461,8 @@ scene("game", () => {
     });
   });
 
-  // ui
+  // --------------------- UI --------------------
+
   const scoreText = add([
     text("Score: " + score, { size: 24 }),
     pos(20, 20),
@@ -378,6 +489,8 @@ scene("game", () => {
     anchor("center"),
     color(150, 150, 150),
   ]);
+
+  wait(1, () => startWave(0));
 });
 
 scene("gameover", () => {

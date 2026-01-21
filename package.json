@@ -5,7 +5,7 @@
   "main": "game.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "keywords": [
@@ -17,9 +17,12 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "kaboom": "^3000.1.17"
+    "kaboom": "^3000.1.17",
+    "kaplay": "^3001.0.19"
   },
   "devDependencies": {
+    "@types/node": "^25.0.9",
+    "typescript": "^5.9.3",
     "vite": "^7.3.0"
   }
 }
