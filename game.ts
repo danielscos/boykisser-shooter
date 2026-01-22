@@ -216,7 +216,6 @@ scene("game", () => {
 
     enemy.onDestroy(() => {
       enemiesRemaining--;
-      debug.log(`Enemy destroyed. Remaining: ${enemiesRemaining}`);
       checkWaveComplete();
     });
   }
@@ -265,6 +264,11 @@ scene("game", () => {
             Math.min(newX, width() - popcornHalfWidth),
           );
         });
+
+        popcorn.onDestroy(() => {
+          enemiesRemaining--;
+          checkWaveComplete();
+        });
       });
     }
   }
@@ -280,10 +284,6 @@ scene("game", () => {
 
     enemiesInWave = wave.regular + wave.fast + wave.heavy;
     enemiesRemaining = enemiesInWave;
-
-    debug.log(
-      `Starting wave ${waveNumber + 1}: Initial count = ${enemiesInWave}`,
-    );
 
     for (let i = 0; i < wave.regular; i++) {
       wait(i * wave.spawnDelay, () => {
@@ -311,29 +311,16 @@ scene("game", () => {
       enemiesInWave += waveSize;
       enemiesRemaining += waveSize;
 
-      debug.log(
-        `Adding popcorn wave ${i + 1}: size=${waveSize}, total now=${enemiesInWave}`,
-      );
-
       const popcornDelay = currentWave === 0 ? i * 5 : i * 4;
       wait(popcornDelay, () => {
         spawnPopcornWave(waveSize);
       });
     }
-
-    debug.log(
-      `Wave ${waveNumber + 1} setup complete: Total enemies = ${enemiesInWave}`,
-    );
   }
 
   function checkWaveComplete() {
-    debug.log(
-      `checkWaveComplete: waveActive=${waveActive}, enemiesRemaining=${enemiesRemaining}, enemiesInWave=${enemiesInWave}`,
-    );
-
     if (waveActive && enemiesRemaining <= 0) {
       waveActive = false;
-      debug.log("Wave complete! Starting next wave in 3 seconds...");
 
       wait(3, () => {
         currentWave++;
