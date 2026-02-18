@@ -1,8 +1,8 @@
-# Boykisser Shooter 🐾
+# Boykisser Shooter
 
-A galaxy shooter game, but it's a boykisser. Dodge and blast waves of enemies across 6 increasingly hectic rounds.
+A galaxy shooter game, but it's cats.
 
-**[▶ Play it here](https://danielscos.github.io/boykisser-shooter/)**
+**[▶ play it here](https://danielscos.github.io/boykisser-shooter/)**
 
 ---
 
@@ -18,21 +18,8 @@ A galaxy shooter game, but it's a boykisser. Dodge and blast waves of enemies ac
 
 ## Gameplay
 
-- You have **3 lives** — getting hit by an enemy or a collision costs one life
-- Defeat all enemies in a wave to advance to the next one
-- Kill enemies in quick succession to build a **combo multiplier**
-- 6 waves total, looping endlessly once completed — each wave gets faster and more crowded
-
-### Enemy Types
-
-| Type | Description |
-|------|-------------|
-| **Regular** | Standard enemies that fly straight down |
-| **Fast** | Lighter enemies that move 1.5× faster |
-| **Heavy** | Tankier enemies with more HP and slower movement |
-| **Popcorn** | Swarms that fly in from the sides in sinusoidal patterns, diving and weaving across the screen |
-
----
+- You have **3 lives**, getting hit by an enemy bullet or a collision costs one life
+- Kill enemies quickly to build a combo multiplier
 
 ## Tech Stack
 
@@ -64,4 +51,4 @@ npm run deploy
 
 ---
 
-*Started as a small project for Campfire Flagship — my first step into game development before moving on to Godot. :3*
+*Started as a small project for Campfire Flagship, my first step into game development before moving on to Godot. :3*
