@@ -30,7 +30,7 @@ loadSprite("bullet", bulletUrl);
 
 let score = 0;
 let lives = 3;
-const PLAYER_SPEED = 300;
+const PLAYER_SPEED = 500;
 const BULLET_SPEED = 600;
 
 // start scene
@@ -89,7 +89,7 @@ scene("game", () => {
 
   const waves = [
     // wave 1: tutorial wave, display game mechanics and popcorn enemies
-    { regular: 0, fast: 0, heavy: 0, popcornWaves: 2, spawnDelay: 1.5 },
+    { regular: 0, fast: 0, heavy: 0, popcornWaves: 1, spawnDelay: 1.5 },
 
     // wave 2: introduce regular enemies
     { regular: 5, fast: 0, heavy: 0, popcornWaves: 1, spawnDelay: 1.5 },
@@ -131,22 +131,20 @@ scene("game", () => {
     "player",
   ]);
 
-  const SPEED = 350;
-
   onKeyDown("left", () => {
-    player.move(-SPEED, 0);
+    player.move(-PLAYER_SPEED, 0);
   });
 
   onKeyDown("right", () => {
-    player.move(SPEED, 0);
+    player.move(PLAYER_SPEED, 0);
   });
 
   onKeyDown("up", () => {
-    player.move(0, -SPEED);
+    player.move(0, -PLAYER_SPEED);
   });
 
   onKeyDown("down", () => {
-    player.move(0, SPEED);
+    player.move(0, PLAYER_SPEED);
   });
 
   player.onUpdate(() => {
@@ -210,9 +208,29 @@ scene("game", () => {
       move(DOWN, speed),
       offscreen({ destroy: true }),
       opacity(1),
+      timer(),
       "enemy",
       { points: points, hp: 3 },
     ]);
+
+    wait(rand(0.5, 2.0), () => {
+      // loop every 2 to 4 seconds
+      enemy.loop(rand(2.0, 4.0), () => {
+        // only shoot if the ene,y is actuall on screen
+        if (enemy.pos.y > 50 && enemy.pos.y < height() - 50) {
+          add([
+            rect(6, 12),
+            pos(enemy.pos.x, enemy.pos.y + 30),
+            anchor("center"),
+            color(255, 50, 50), // red
+            area(), // enable collision
+            move(DOWN, 400), // move down fast
+            offscreen({ destroy: true }), // cleanup when off screen
+            "enemyBullet", // tag for collision handling
+          ]);
+        }
+      });
+    });
 
     enemy.onDestroy(() => {
       enemiesRemaining--;
@@ -220,54 +238,175 @@ scene("game", () => {
     });
   }
 
-  function spawnPopcornWave(waveSize: number) {
-    const spawnFromLeft = chance(0.5);
+  function spawnPopcornWave(
+    waveSize: number,
+    spawnFromLeft: boolean,
+    waveIndex: number,
+  ) {
     const popcornHalfWidth = (24 * 2) / 2;
     const safeMargin = popcornHalfWidth + POPCORN_AMPLITUDE + 20;
-    const startX = spawnFromLeft ? safeMargin : width() - safeMargin;
-    const direction = spawnFromLeft ? 1 : -1;
 
-    const moveSpeed = currentWave === 0 ? POPCORN_SPEED * 0.7 : POPCORN_SPEED;
+    const moveSpeed = waveIndex === 0 ? POPCORN_SPEED * 1.5 : POPCORN_SPEED;
 
-    for (let i = 0; i < waveSize; i++) {
-      wait(i * 0.3, () => {
-        const popcorn = add([
-          sprite("enemies", { frame: 3 }),
-          pos(startX, -20 - i * 40),
-          anchor("center"),
-          area(),
-          scale(2),
-          offscreen({ destroy: true }),
-          opacity(1),
-          "enemy",
-          "popcorn",
-          {
-            hp: 1,
-            points: 5,
-            startX: startX,
-            direction: direction,
-            timeAlive: 0,
-          },
-        ]);
+    // For Wave 0, we perform the "Cross-Over Pincer" which spawns PAIRS (Left & Right)
+    // So we iterate waveSize times, but spawn 2 enemies if currentWave == 0.
+    // If not wave 0, we use original logic.
+    const loopCount = waveSize;
 
-        // ----------- popcorn creation -----------
+    for (let i = 0; i < loopCount; i++) {
+      wait(i * 0.4, () => {
+        // Wave 0 spawns pairs. Other waves spawn single side.
+        const sides =
+          waveIndex === 0
+            ? ["left", "right"]
+            : [spawnFromLeft ? "left" : "right"];
 
-        popcorn.onUpdate(() => {
-          popcorn.timeAlive += dt();
-          popcorn.pos.y += moveSpeed * dt();
+        sides.forEach((side) => {
+          const isLeft = side === "left";
+          let startX = 0;
+          let direction = isLeft ? 1 : -1;
 
-          const sineOffset =
-            Math.sin(popcorn.timeAlive * POPCORN_FREQUENCY) * POPCORN_AMPLITUDE;
-          const newX = popcorn.startX + sineOffset * popcorn.direction;
-          popcorn.pos.x = Math.max(
-            popcornHalfWidth,
-            Math.min(newX, width() - popcornHalfWidth),
-          );
-        });
+          if (waveIndex === 0) {
+            startX = isLeft ? width() * 0.1 : width() * 0.9;
+          } else {
+            startX = isLeft ? safeMargin : width() - safeMargin;
+          }
 
-        popcorn.onDestroy(() => {
-          enemiesRemaining--;
-          checkWaveComplete();
+          // Store these in closure variables to ensure they are available to update loop
+          const initialX = startX;
+          const initialDir = direction;
+
+          const popcorn = add([
+            sprite("enemies", { frame: 3 }),
+            pos(startX, waveIndex === 0 ? -50 : -20 - i * 30),
+            anchor("center"),
+            area(),
+            scale(2),
+            // Increase offscreen distance buffer so they don't die immediately on spawn
+            offscreen({ destroy: true, distance: 400 }),
+            opacity(1),
+            "enemy",
+            "popcorn",
+            {
+              hp: 1, // health points
+              points: 5, // how many points im worth
+              startX: startX, // start position
+              direction: direction, // direction`
+              timeAlive: 0,
+              phase: "dive", // start in 'dive' state
+              controlX: 0,
+              controlY: 0,
+              targetX: 0, // flying to what x?
+              targetY: 0, // flying to what y?
+              baseY: 0, // center Y position
+              phaseTimer: 0, // how long have i been doing the current movement?
+              diveVelocity: vec2(0, 0), // speed and direction vector
+              spawnIndex: i, // my ID number to decide if i am odd or even
+              originSide: isLeft ? "left" : "right",
+              waveIndex: waveIndex, // Remember which wave created me!
+            },
+          ]);
+
+          if (waveIndex === 0) {
+            // CONFIGURATION
+            const spacing = 50;
+            const gap = 60;
+
+            // logic:
+            // if im from the left group, my target is to the left of the screen
+            // we substract (gap + spacing) to move further left for each subsequent enemy
+            if (isLeft) {
+              popcorn.targetX = width() / 2 - gap - i * spacing;
+            } else {
+              popcorn.targetX = width() / 2 + gap + i * spacing;
+            }
+
+            popcorn.targetY = height() * 0.4; // everyone targets same height (40% down the screen)
+
+            // calculate the vector (direction and speed) to get there
+            const targetPos = vec2(popcorn.targetX, popcorn.targetY);
+            const startPos = vec2(startX, -50);
+
+            // .sub() gets the difference vector
+            // .unit() normalizes it to length 1 (just direction)
+            // .scale() multiplies it by speed
+            popcorn.diveVelocity = targetPos
+              .sub(startPos)
+              .unit()
+              .scale(moveSpeed);
+          }
+
+          popcorn.onUpdate(() => {
+            popcorn.timeAlive += dt();
+
+            // Use local waveIndex instead of global currentWave
+            if (popcorn.waveIndex === 0) {
+              if (popcorn.phase === "dive") {
+                const targetPos = vec2(popcorn.targetX, popcorn.targetY);
+                const distToTarget = popcorn.pos.dist(targetPos);
+
+                // are we close enough? (within 10 pixels)
+                if (distToTarget < 10) {
+                  popcorn.pos = targetPos; // snap exactly to target position
+                  popcorn.baseY = popcorn.pos.y;
+                  popcorn.phase = "oscillate";
+                  popcorn.phaseTimer = 0;
+                } else {
+                  // keep flying
+                  popcorn.pos = popcorn.pos.add(
+                    popcorn.diveVelocity.scale(dt()),
+                  );
+                }
+              } else if (popcorn.phase === "oscillate") {
+                popcorn.phaseTimer += dt(); // count up time
+
+                const frequency = 4; // how fast we bob up and down
+                const amplitude = 60; // how far we move (pixels)
+
+                // if spawnIndex is even, remainder is 0 -> dir becomes -1
+                // if spawnIndex is odd, remainder is 1 -> dir becomes 1
+                const dir = popcorn.spawnIndex % 2 === 0 ? -1 : 1;
+
+                // set Y position based on time
+                // sin() gives a value between -1 and 1
+                // we multiply by amplitude to make it bigger
+                // we multiply it by dir to flip the direction
+                popcorn.pos.y =
+                  popcorn.baseY +
+                  Math.sin(popcorn.phaseTimer * frequency) * amplitude * dir;
+
+                // after 4 seconds, get bored and leave
+                if (popcorn.phaseTimer > 4.0) {
+                  popcorn.phase = "exit";
+                }
+              } else if (popcorn.phase === "exit") {
+                // if i came from the left, i go back left (-1)
+                // if i came from the right, i go back right (1)
+                const exitDir = popcorn.originSide === "left" ? -1 : 1;
+
+                // move horizontally fast (2x speed)
+                popcorn.pos.x += exitDir * moveSpeed * 2 * dt();
+              }
+            } else {
+              // later waves: original sine wave pattern
+              popcorn.pos.y += moveSpeed * dt();
+
+              const sineOffset =
+                Math.sin(popcorn.timeAlive * POPCORN_FREQUENCY) *
+                POPCORN_AMPLITUDE;
+              // Use closure variable initialX to be absolutely safe
+              const newX = initialX + sineOffset * initialDir;
+              popcorn.pos.x = Math.max(
+                popcornHalfWidth,
+                Math.min(newX, width() - popcornHalfWidth),
+              );
+            }
+          });
+
+          popcorn.onDestroy(() => {
+            enemiesRemaining--;
+            checkWaveComplete();
+          });
         });
       });
     }
@@ -306,14 +445,27 @@ scene("game", () => {
       });
     }
 
+    // Determine random start side for the first popcorn wave
+    const startLeft = chance(0.5);
+
     for (let i = 0; i < wave.popcornWaves; i++) {
-      const waveSize = currentWave === 0 ? 6 : 4;
-      enemiesInWave += waveSize;
-      enemiesRemaining += waveSize;
+      // CONFIGURATION
+      // if wave 0: spawn 8 pairs (16 enemies)
+      // if wave 1: spawn 6 enemies
+      const waveSize = currentWave === 0 ? 8 : 6;
+
+      // For Wave 0, we spawn pairs so we count total enemies correctly
+      // waveSize is number of spawns. Pairs = 2x.
+      const totalEnemies = currentWave === 0 ? waveSize * 2 : waveSize;
+
+      enemiesInWave += totalEnemies;
+      enemiesRemaining += totalEnemies;
 
       const popcornDelay = currentWave === 0 ? i * 5 : i * 4;
       wait(popcornDelay, () => {
-        spawnPopcornWave(waveSize);
+        // Alternate sides: even indices use startLeft, odd use opposite
+        const isLeft = i % 2 === 0 ? startLeft : !startLeft;
+        spawnPopcornWave(waveSize, isLeft, currentWave);
       });
     }
   }
@@ -331,7 +483,29 @@ scene("game", () => {
 
   // --------------------- collision handlers ------------------------
 
+  function hurtPlayer() {
+    shake(10); // screen shake
+    lives -= 1;
+
+    // flash the player red
+    const player = get("player")[0];
+    if (player) {
+      player.color = rgb(255, 100, 100);
+      wait(0.1, () => {
+        player.color = rgb(255, 255, 255);
+      });
+    }
+
+    if (lives <= 0) go("gameover");
+  }
+
   onCollideUpdate("bullet", "enemy", (bullet, enemy) => {
+    // Prevent multiple hits on the same dying enemy
+    if (enemy.isDying) {
+      bullet.destroy();
+      return;
+    }
+
     for (let i = 0; i < 8; i++) {
       add([
         rect(4, 4),
@@ -343,7 +517,7 @@ scene("game", () => {
       ]);
     }
 
-    bullet.destroy();
+    bullet.destroy(); // Destroy the bullet immediately
 
     // ----------------- enemy collision handler --------------
 
@@ -358,6 +532,8 @@ scene("game", () => {
       }
     }
 
+    // Mark enemy as dying so it doesn't give score again
+    enemy.isDying = true;
     enemy.color = rgb(255, 100, 100);
 
     wait(0.1, () => {
@@ -397,18 +573,14 @@ scene("game", () => {
     }
   });
 
+  onCollide("enemyBullet", "player", (bullet, player) => {
+    bullet.destroy();
+    hurtPlayer();
+  });
+
   onCollideUpdate("enemy", "player", (enemy, player) => {
-    shake(10);
     enemy.destroy();
-
-    lives -= 1;
-
-    player.color = rgb(255, 100, 100);
-    wait(0.1, () => {
-      player.color = rgb(255, 255, 255);
-    });
-
-    if (lives <= 0) go("gameover");
+    hurtPlayer();
   });
 
   loop(10, () => {
